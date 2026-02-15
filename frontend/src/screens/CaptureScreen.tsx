@@ -85,39 +85,37 @@ export default function CaptureScreen() {
     startCamera();
   }
 
-  async function handleSave() {
-    setSaving(true);
+async function handleSave() {
+  setSaving(true);
+  
+  try {
+    // Create memory object
+    const newMemory = {
+      id: Date.now(),
+      emotion,
+      intensity: 87,
+      timestamp: new Date().toISOString(),
+      location: 'University of Calgary',
+      latitude: 51.0447,
+      longitude: -114.0719,
+      heartRate: 105,
+      privacy,
+      image: capturedImage, // base64 string
+    };
     
-    try {
-      // Convert base64 to File object
-      let imageFile: File | undefined = undefined;
-      
-      if (capturedImage) {
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
-        imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
-      }
-      
-      await createMemory({
-        emotion,
-        intensity: 87,
-        timestamp: 'Just now',
-        location: 'University of Calgary',
-        latitude: 51.0447,
-        longitude: -114.0719,
-        heartRate: 105,
-        privacy,
-        image: imageFile,
-      });
-      
-      navigate('/feed');
-    } catch (error) {
-      console.error('Failed to save memory:', error);
-      alert('Failed to save memory. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    // Save to localStorage (temporary!)
+    const existingMemories = JSON.parse(localStorage.getItem('memories') || '[]');
+    existingMemories.unshift(newMemory); // Add to beginning
+    localStorage.setItem('memories', JSON.stringify(existingMemories));
+    
+    navigate('/feed');
+  } catch (error) {
+    console.error('Failed to save memory:', error);
+    alert('Failed to save memory. Please try again.');
+  } finally {
+    setSaving(false);
   }
+}
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
