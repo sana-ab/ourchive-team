@@ -58,10 +58,6 @@ export default function CaptureScreen() {
     }
   }
 
-  function flipCamera() {
-    setFacingMode(current => current === 'user' ? 'environment' : 'user');
-  }
-
   function takePicture() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
@@ -84,6 +80,42 @@ export default function CaptureScreen() {
     setCapturedImage(null);
     startCamera();
   }
+const [location, setLocation] = useState({
+  name: 'University of Calgary',
+  lat: 51.0447,
+  lng: -114.0719
+});
+
+useEffect(() => {
+  // Get real location
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Reverse geocode to get location name
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+          );
+          const data = await response.json();
+          setLocation({
+            name: data.display_name.split(',')[0] || 'Current Location',
+            lat,
+            lng
+          });
+        } catch {
+          setLocation({ name: 'Current Location', lat, lng });
+        }
+      },
+      () => {
+        // Fallback if denied
+        console.log('Location permission denied, using default');
+      }
+    );
+  }
+}, []);
 
 async function handleSave() {
   setSaving(true);
@@ -94,10 +126,10 @@ async function handleSave() {
       id: Date.now(),
       emotion,
       intensity: 87,
-      timestamp: new Date().toISOString(),
-      location: 'University of Calgary',
-      latitude: 51.0447,
-      longitude: -114.0719,
+      timestamp: new Date().toLocaleString(), 
+      location: location.name,
+      latitude: location.lat,
+      longitude: location.lng,
       heartRate: 105,
       privacy,
       image: capturedImage, // base64 string
@@ -191,7 +223,6 @@ async function handleSave() {
 
             {!capturedImage && (
               <button 
-                onClick={flipCamera}
                 className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
               >
                 <RotateCw className="w-5 h-5" />
