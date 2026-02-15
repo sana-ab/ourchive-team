@@ -3,6 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, ChevronLeft, RotateCw, Camera } from 'lucide-react';
 import { emotionColors, EmotionType } from '../components/app/OurchiveComponents';
 import { createMemory } from '../services/api';
+import { 
+  getSimulatedBiometrics, 
+  predictEmotion, 
+  isEmotionalMoment,
+  createBiometricStream,
+  BiometricData, 
+} from '../services/MLEmotionDetection';
+import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
   const [emotion] = useState<EmotionType>('Excited');
@@ -12,12 +20,14 @@ export default function CaptureScreen() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const navigate = useNavigate();
-
   const privacyOptions: ('Private' | 'Friends' | 'Public')[] = ['Private', 'Friends', 'Public'];
+  const [currentBiometrics, setCurrentBiometrics] = useState<BiometricData | null>(null);
+  const [mlEmotion, setMlEmotion] = useState<EmotionType>('Calm');
+  const [mlIntensity, setMlIntensity] = useState(50);
+  const [showNotification, setShowNotification] = useState(false);
 
   // Start camera when component mounts
   useEffect(() => {
@@ -87,7 +97,7 @@ const [location, setLocation] = useState({
 });
 
 useEffect(() => {
-  // Get real location
+  // --- Effect 1: Geolocation ---
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -97,25 +107,62 @@ useEffect(() => {
         // Reverse geocode to get location name
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            {
+              headers: {
+                // REQUIRED by OSM: Identify your app
+                'User-Agent': 'OurchiveApp/1.0 (contact@example.com)' 
+              }
+            }
           );
+          
+          if (!response.ok) throw new Error('Geocoding failed');
+          
           const data = await response.json();
           setLocation({
-            name: data.display_name.split(',')[0] || 'Current Location',
+            name: data.display_name?.split(',')[0] || 'Current Location',
             lat,
             lng
           });
-        } catch {
+        } catch (error) {
+          console.warn('Location lookup failed:', error);
           setLocation({ name: 'Current Location', lat, lng });
         }
       },
-      () => {
-        // Fallback if denied
-        console.log('Location permission denied, using default');
+      (error) => {
+        console.log('Location permission denied/error:', error.message);
+        // Handle default location if needed
       }
     );
   }
-}, []);
+}, []); 
+
+useEffect(() => {
+  // --- Effect 2: Biometrics ---
+  console.log('🫀 Starting biometric monitoring...');
+  
+  const cleanup = createBiometricStream(async (biometrics) => {
+    // console.log('Biometrics:', biometrics); // Optional: reduce noise
+    setCurrentBiometrics(biometrics);
+    
+    try {
+      const prediction = await predictEmotion(biometrics);
+      // console.log('ML Prediction:', prediction);
+      setMlEmotion(prediction.emotion);
+      setMlIntensity(prediction.intensity);
+      
+      // Check if this is an emotional moment
+      if (isEmotionalMoment(biometrics) && !showNotification && !capturedImage) {
+        console.log('🎯 Emotional moment detected!');
+        setShowNotification(true);
+      }
+    } catch (error) {
+      console.error('ML prediction error:', error);
+    }
+  }, 3000); 
+  
+  return cleanup;
+}, [showNotification, capturedImage]); 
 
 async function handleSave() {
   setSaving(true);
@@ -130,7 +177,7 @@ async function handleSave() {
       imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
     }
     
-    // Save to BACKEND (not localStorage!)
+    // Save to BACKEND 
     await createMemory({
       emotion,
       intensity: 87,
@@ -140,7 +187,7 @@ async function handleSave() {
       longitude: location.lng,
       heartRate: 105,
       privacy,
-      image: imageFile, // ← File object, not base64!
+      image: imageFile, 
     });
     
     navigate('/feed');
