@@ -4,13 +4,12 @@ import { Heart, ChevronLeft, RotateCw, Camera } from 'lucide-react';
 import { emotionColors, EmotionType } from '../components/app/OurchiveComponents';
 import { createMemory } from '../services/api';
 import { 
-  getSimulatedBiometrics, 
   predictEmotion, 
   isEmotionalMoment,
   createBiometricStream,
   BiometricData, 
 } from '../services/MLEmotionDetection';
-import BiometricNotification from '../components/BiometricNotification';
+// import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
   const [emotion] = useState<EmotionType>('Excited');
@@ -20,14 +19,23 @@ export default function CaptureScreen() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
   const navigate = useNavigate();
   const privacyOptions: ('Private' | 'Friends' | 'Public')[] = ['Private', 'Friends', 'Public'];
+  
   const [currentBiometrics, setCurrentBiometrics] = useState<BiometricData | null>(null);
   const [mlEmotion, setMlEmotion] = useState<EmotionType>('Calm');
   const [mlIntensity, setMlIntensity] = useState(50);
   const [showNotification, setShowNotification] = useState(false);
+  
+  const [location, setLocation] = useState({
+    name: 'University of Calgary',
+    lat: 51.0447,
+    lng: -114.0719
+  });
 
   // Start camera when component mounts
   useEffect(() => {
@@ -90,114 +98,101 @@ export default function CaptureScreen() {
     setCapturedImage(null);
     startCamera();
   }
-const [location, setLocation] = useState({
-  name: 'University of Calgary',
-  lat: 51.0447,
-  lng: -114.0719
-});
 
-useEffect(() => {
-  // --- Effect 1: Geolocation ---
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        
-        // Reverse geocode to get location name
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-            {
-              headers: {
-                // REQUIRED by OSM: Identify your app
-                'User-Agent': 'OurchiveApp/1.0 (contact@example.com)' 
+  useEffect(() => {
+    // --- Effect 1: Geolocation ---
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+              {
+                headers: {
+                  'User-Agent': 'OurchiveApp/1.0 (contact@example.com)' 
+                }
               }
-            }
-          );
-          
-          if (!response.ok) throw new Error('Geocoding failed');
-          
-          const data = await response.json();
-          setLocation({
-            name: data.display_name?.split(',')[0] || 'Current Location',
-            lat,
-            lng
-          });
-        } catch (error) {
-          console.warn('Location lookup failed:', error);
-          setLocation({ name: 'Current Location', lat, lng });
+            );
+            
+            if (!response.ok) throw new Error('Geocoding failed');
+            
+            const data = await response.json();
+            setLocation({
+              name: data.display_name?.split(',')[0] || 'Current Location',
+              lat,
+              lng
+            });
+          } catch (error) {
+            console.warn('Location lookup failed:', error);
+            setLocation({ name: 'Current Location', lat, lng });
+          }
+        },
+        (error) => {
+          console.log('Location permission denied/error:', error.message);
         }
-      },
-      (error) => {
-        console.log('Location permission denied/error:', error.message);
-        // Handle default location if needed
-      }
-    );
-  }
-}, []); 
+      );
+    }
+  }, []); 
 
-useEffect(() => {
-  // --- Effect 2: Biometrics ---
-  console.log('🫀 Starting biometric monitoring...');
-  
-  const cleanup = createBiometricStream(async (biometrics) => {
-    // console.log('Biometrics:', biometrics); // Optional: reduce noise
-    setCurrentBiometrics(biometrics);
+  useEffect(() => {
+    // --- Effect 2: Biometrics ---
+    console.log('🫀 Starting biometric monitoring...');
+    
+    const cleanup = createBiometricStream(async (biometrics) => {
+      setCurrentBiometrics(biometrics);
+      
+      try {
+        const prediction = await predictEmotion(biometrics);
+        setMlEmotion(prediction.emotion);
+        setMlIntensity(prediction.intensity);
+        
+        if (isEmotionalMoment(biometrics) && !showNotification && !capturedImage) {
+          console.log('🎯 Emotional moment detected!');
+          setShowNotification(true);
+        }
+      } catch (error) {
+        console.error('ML prediction error:', error);
+      }
+    }, 3000); 
+    
+    return cleanup;
+  }, [showNotification, capturedImage]); 
+
+  async function handleSave() {
+    setSaving(true);
     
     try {
-      const prediction = await predictEmotion(biometrics);
-      // console.log('ML Prediction:', prediction);
-      setMlEmotion(prediction.emotion);
-      setMlIntensity(prediction.intensity);
+      let imageFile: File | undefined = undefined;
       
-      // Check if this is an emotional moment
-      if (isEmotionalMoment(biometrics) && !showNotification && !capturedImage) {
-        console.log('🎯 Emotional moment detected!');
-        setShowNotification(true);
+      if (capturedImage) {
+        const response = await fetch(capturedImage);
+        const blob = await response.blob();
+        imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
       }
+      
+      await createMemory({
+        emotion,
+        intensity: 87,
+        timestamp: new Date().toLocaleString(),
+        location: location.name,
+        latitude: location.lat,
+        longitude: location.lng,
+        heartRate: 105,
+        privacy,
+        image: imageFile, 
+      });
+      
+      navigate('/feed');
     } catch (error) {
-      console.error('ML prediction error:', error);
+      console.error('Failed to save memory:', error);
+      alert('Failed to save memory. Please try again.');
+    } finally {
+      setSaving(false);
     }
-  }, 3000); 
-  
-  return cleanup;
-}, [showNotification, capturedImage]); 
-
-async function handleSave() {
-  setSaving(true);
-  
-  try {
-    // Convert base64 to File object
-    let imageFile: File | undefined = undefined;
-    
-    if (capturedImage) {
-      const response = await fetch(capturedImage);
-      const blob = await response.blob();
-      imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
-    }
-    
-    // Save to BACKEND 
-    await createMemory({
-      emotion,
-      intensity: 87,
-      timestamp: new Date().toLocaleString(),
-      location: location.name,
-      latitude: location.lat,
-      longitude: location.lng,
-      heartRate: 105,
-      privacy,
-      image: imageFile, 
-    });
-    
-    navigate('/feed');
-  } catch (error) {
-    console.error('Failed to save memory:', error);
-    alert('Failed to save memory. Please try again.');
-  } finally {
-    setSaving(false);
   }
-}
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
@@ -246,19 +241,21 @@ async function handleSave() {
               <ChevronLeft className="w-6 h-6" />
             </button>
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: emotionColors[emotion] }}
-                />
-                <span className="text-sm font-medium">{emotion}</span>
-              </div>
+            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
+             <div 
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: emotionColors[mlEmotion] }}
+            />
+               <span className="text-sm font-medium">{mlEmotion}</span>
+               <span className="text-xs opacity-75">ML</span>
+            </div>
 
-              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
+             <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
                 <Heart className="w-4 h-4 fill-current text-red-400" />
-                <span className="text-sm font-medium">105 BPM</span>
-              </div>
+                <span className="text-sm font-medium">
+                  {currentBiometrics?.heartRate || 70} BPM
+               </span>
+            </div>
 
               <div className="bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
                 <span className="text-sm font-medium">
@@ -280,7 +277,6 @@ async function handleSave() {
             )}
           </div>
         </div>
-      </div>
 
       {/* Center Capture/Save Button */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
