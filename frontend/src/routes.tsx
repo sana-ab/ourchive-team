@@ -4,6 +4,9 @@ import FeedScreen from "./screens/FeedScreen";
 import MapScreen from "./screens/MapScreen";
 import CaptureScreen from "./screens/CaptureScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import MemoryDetailScreen from "./screens/MemoryDetailScreen";
+
+
 
 function ErrorBoundary() {
   return <Navigate to="/" replace />;
@@ -40,4 +43,10 @@ export const router = createBrowserRouter([
     element: <Navigate to="/" replace />,
     errorElement: <ErrorBoundary />,
   },
+
+{
+    path: "/memory/:id",
+    Component: MemoryDetailScreen,
+    errorElement: <ErrorBoundary />,
+  }
 ]);

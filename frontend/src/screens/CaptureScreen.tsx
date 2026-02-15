@@ -5,7 +5,7 @@ import { emotionColors, EmotionType } from '../components/app/OurchiveComponents
 import { createMemory } from '../services/api';
 
 export default function CaptureScreen() {
-  const [emotion] = useState<EmotionType>('Excited');
+  const [emotion, setEmotion] = useState<EmotionType>('Excited'); // ← Can now change!
   const [privacy, setPrivacy] = useState<'Private' | 'Friends' | 'Public'>('Private');
   const [saving, setSaving] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
@@ -18,8 +18,8 @@ export default function CaptureScreen() {
   const navigate = useNavigate();
 
   const privacyOptions: ('Private' | 'Friends' | 'Public')[] = ['Private', 'Friends', 'Public'];
+  const emotionOptions: EmotionType[] = ['Calm', 'Excited', 'Stressed', 'Aroused'];
 
-  // Start camera when component mounts
   useEffect(() => {
     startCamera();
     return () => {
@@ -58,6 +58,10 @@ export default function CaptureScreen() {
     }
   }
 
+  function flipCamera() {
+    setFacingMode(current => current === 'user' ? 'environment' : 'user');
+  }
+
   function takePicture() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
@@ -80,77 +84,73 @@ export default function CaptureScreen() {
     setCapturedImage(null);
     startCamera();
   }
-const [location, setLocation] = useState({
-  name: 'University of Calgary',
-  lat: 51.0447,
-  lng: -114.0719
-});
 
-useEffect(() => {
-  // Get real location
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        
-        // Reverse geocode to get location name
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-          );
-          const data = await response.json();
-          setLocation({
-            name: data.display_name.split(',')[0] || 'Current Location',
-            lat,
-            lng
-          });
-        } catch {
-          setLocation({ name: 'Current Location', lat, lng });
+  const [location, setLocation] = useState({
+    name: 'University of Calgary',
+    lat: 51.0447,
+    lng: -114.0719
+  });
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+            );
+            const data = await response.json();
+            setLocation({
+              name: data.display_name.split(',')[0] || 'Current Location',
+              lat,
+              lng
+            });
+          } catch {
+            setLocation({ name: 'Current Location', lat, lng });
+          }
+        },
+        () => {
+          console.log('Location permission denied, using default');
         }
-      },
-      () => {
-        // Fallback if denied
-        console.log('Location permission denied, using default');
-      }
-    );
-  }
-}, []);
-
-async function handleSave() {
-  setSaving(true);
-  
-  try {
-    // Convert base64 to File object
-    let imageFile: File | undefined = undefined;
-    
-    if (capturedImage) {
-      const response = await fetch(capturedImage);
-      const blob = await response.blob();
-      imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
+      );
     }
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
     
-    // Save to BACKEND (not localStorage!)
-    await createMemory({
-      emotion,
-      intensity: 87,
-      timestamp: new Date().toLocaleString(),
-      location: location.name,
-      latitude: location.lat,
-      longitude: location.lng,
-      heartRate: 105,
-      privacy,
-      image: imageFile, // ← File object, not base64!
-    });
-    
-    navigate('/feed');
-  } catch (error) {
-    console.error('Failed to save memory:', error);
-    alert('Failed to save memory. Please try again.');
-  } finally {
-    setSaving(false);
+    try {
+      let imageFile: File | undefined = undefined;
+      
+      if (capturedImage) {
+        const response = await fetch(capturedImage);
+        const blob = await response.blob();
+        imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
+      }
+      
+      await createMemory({
+        emotion,
+        intensity: 87,
+        timestamp: new Date().toLocaleString(),
+        location: location.name,
+        latitude: location.lat,
+        longitude: location.lng,
+        heartRate: 105,
+        privacy,
+        image: imageFile,
+      });
+      
+      navigate('/feed');
+    } catch (error) {
+      console.error('Failed to save memory:', error);
+      alert('Failed to save memory. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
@@ -226,6 +226,7 @@ async function handleSave() {
 
             {!capturedImage && (
               <button 
+                onClick={flipCamera}
                 className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
               >
                 <RotateCw className="w-5 h-5" />
@@ -234,6 +235,33 @@ async function handleSave() {
           </div>
         </div>
       </div>
+
+      {/* EMOTION SELECTOR - NEW! */}
+      {!capturedImage && (
+        <div className="absolute top-24 left-0 right-0 z-10 px-6">
+          <div className="max-w-md mx-auto">
+            <div className="flex justify-center gap-2">
+              {emotionOptions.map(e => (
+                <button
+                  key={e}
+                  onClick={() => setEmotion(e)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    emotion === e 
+                      ? 'bg-white text-gray-800 shadow-lg scale-110' 
+                      : 'bg-white/20 backdrop-blur-sm text-white/80 hover:bg-white/30'
+                  }`}
+                  style={{ 
+                    borderWidth: emotion === e ? '2px' : '0',
+                    borderColor: emotion === e ? emotionColors[e] : 'transparent'
+                  }}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Center Capture/Save Button */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
@@ -314,7 +342,7 @@ async function handleSave() {
             </div>
           ) : (
             <p className="text-center text-sm text-white/80">
-              {cameraActive ? 'Tap to capture this moment' : 'Starting camera...'}
+              {cameraActive ? 'Select emotion and tap to capture' : 'Starting camera...'}
             </p>
           )}
         </div>
