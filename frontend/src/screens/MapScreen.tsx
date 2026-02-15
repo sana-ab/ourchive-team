@@ -16,7 +16,7 @@ const mockPins = [
 
 export default function MapScreen() {
   const [selectedPin, setSelectedPin] = useState<typeof mockPins[0] | null>(mockPins[0]);
-  const globeEl = useRef<any>();
+  const globeEl = useRef<any>(null);
 
   useEffect(() => {
     if (globeEl.current) {
