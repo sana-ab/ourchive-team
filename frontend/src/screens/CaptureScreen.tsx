@@ -121,24 +121,27 @@ async function handleSave() {
   setSaving(true);
   
   try {
-    // Create memory object
-    const newMemory = {
-      id: Date.now(),
+    // Convert base64 to File object
+    let imageFile: File | undefined = undefined;
+    
+    if (capturedImage) {
+      const response = await fetch(capturedImage);
+      const blob = await response.blob();
+      imageFile = new File([blob], 'memory.jpg', { type: 'image/jpeg' });
+    }
+    
+    // Save to BACKEND (not localStorage!)
+    await createMemory({
       emotion,
       intensity: 87,
-      timestamp: new Date().toLocaleString(), 
+      timestamp: new Date().toLocaleString(),
       location: location.name,
       latitude: location.lat,
       longitude: location.lng,
       heartRate: 105,
       privacy,
-      image: capturedImage, // base64 string
-    };
-    
-    // Save to localStorage (temporary!)
-    const existingMemories = JSON.parse(localStorage.getItem('memories') || '[]');
-    existingMemories.unshift(newMemory); // Add to beginning
-    localStorage.setItem('memories', JSON.stringify(existingMemories));
+      image: imageFile, // ← File object, not base64!
+    });
     
     navigate('/feed');
   } catch (error) {

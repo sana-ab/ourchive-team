@@ -1,22 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import Globe from 'react-globe.gl';
 import { CuteBackground } from '../components/cute/components';
-import { 
-  TopNav, 
-  TabBar,
-  EmotionType,
-  emotionColors
-} from '../components/app/OurchiveComponents';
+import { TopNav, TabBar, EmotionType, emotionColors } from '../components/app/OurchiveComponents';
+import { getAllMemories } from '../services/api';
 
-const mockPins = [
+export default function MapScreen() {
+  const [selectedPin, setSelectedPin] = useState<any>(null);
+  const [pins, setPins] = useState<any[]>([]);
+  const globeEl = useRef<any>(null);
+  const mockPins = [
   { id: 1, emotion: 'Excited' as EmotionType, lat: 51.0447, lng: -114.0719, location: 'UCalgary', timestamp: '2 hours ago', isPulsing: true },
   { id: 2, emotion: 'Calm' as EmotionType, lat: 51.0534, lng: -114.0625, location: 'Prince\'s Island', timestamp: '5 hours ago' },
   { id: 3, emotion: 'Aroused' as EmotionType, lat: 51.0486, lng: -114.0708, location: 'Stampede Grounds', timestamp: '1 day ago' },
 ];
-
-export default function MapScreen() {
-  const [selectedPin, setSelectedPin] = useState<typeof mockPins[0] | null>(mockPins[0]);
-  const globeEl = useRef<any>(null);
 
   useEffect(() => {
     if (globeEl.current) {
@@ -25,10 +21,29 @@ export default function MapScreen() {
     }
   }, []);
 
-  const pointsData = mockPins.map(pin => ({
+  useEffect(() => {
+    // Load memories from backend
+    loadMemories();
+  }, []);
+
+  const loadMemories = async () => {
+    const memories = await getAllMemories();
+    const memoryPins = memories.map(memory => ({
+      id: memory.id,
+      emotion: memory.emotion as EmotionType,
+      lat: memory.latitude || 51.0447,
+      lng: memory.longitude || -114.0719,
+      location: memory.location,
+      timestamp: memory.timestamp,
+      isPulsing: true,
+    }));
+    setPins(memoryPins);
+  };
+
+  const pointsData = pins.map(pin => ({
     ...pin,
     size: pin.isPulsing ? 0.8 : 0.5,
-    color: emotionColors[pin.emotion],
+    color: emotionColors[pin.emotion as EmotionType],
   }));
 
   return (
@@ -38,8 +53,6 @@ export default function MapScreen() {
 
         <div className="relative h-[calc(100vh-180px)] max-w-md mx-auto">
           <div className="absolute inset-0 m-4 rounded-3xl overflow-hidden shadow-2xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-pink-50 opacity-30" />
-            
             <Globe
               ref={globeEl}
               globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
@@ -49,19 +62,6 @@ export default function MapScreen() {
               pointAltitude={0.01}
               pointRadius="size"
               pointColor="color"
-              pointLabel={(d: any) => `
-                <div style="
-                  background: white;
-                  padding: 8px 12px;
-                  border-radius: 12px;
-                  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                  font-family: sans-serif;
-                  font-size: 13px;
-                ">
-                  <div style="font-weight: 600;">${d.emotion}</div>
-                  <div style="font-size: 11px; color: #666;">${d.location}</div>
-                </div>
-              `}
               onPointClick={(point: any) => setSelectedPin(point)}
               
               atmosphereColor="rgba(173, 216, 230, 0.6)"
@@ -69,35 +69,25 @@ export default function MapScreen() {
               
               width={Math.min(window.innerWidth - 32, 416)}
               height={window.innerHeight - 180}
-              
-              enablePointerInteraction={true}
             />
           </div>
 
           {selectedPin && (
-            <div className="absolute bottom-0 left-0 right-0 p-4 animate-slide-up">
+            <div className="absolute bottom-0 left-0 right-0 p-4">
               <div className="bg-white/95 backdrop-blur-md rounded-3xl p-4 shadow-xl">
-                <div className="flex items-start justify-between mb-2">
+                <div className="flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span 
-                        className="px-3 py-1 rounded-full text-xs font-semibold"
-                        style={{ 
-                          backgroundColor: `${emotionColors[selectedPin.emotion]}20`,
-                          color: emotionColors[selectedPin.emotion]
-                        }}
-                      >
-                        {selectedPin.emotion}
-                      </span>
-                      <span className="text-xs text-gray-500">{selectedPin.timestamp}</span>
-                    </div>
-                    <h3 className="font-semibold text-gray-900">{selectedPin.location}</h3>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ 
+                      backgroundColor: `${emotionColors[selectedPin.emotion as EmotionType]}20`,
+                      color: emotionColors[selectedPin.emotion as EmotionType]
+                    }}>
+                      {selectedPin.emotion}
+                    </span>
+                    <h3 className="font-semibold text-gray-900 mt-2">{selectedPin.location}</h3>
+                    <p className="text-xs text-gray-500">{selectedPin.timestamp}</p>
                   </div>
-                  <button 
-                    onClick={() => setSelectedPin(null)}
-                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
-                  >
-                    <span>✕</span>
+                  <button onClick={() => setSelectedPin(null)} className="w-8 h-8 rounded-full bg-gray-100">
+                    ✕
                   </button>
                 </div>
               </div>
