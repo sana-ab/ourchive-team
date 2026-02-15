@@ -70,6 +70,7 @@ export function EmotionIndicator({
 
 // Memory Card
 export function MemoryCard({
+  id,
   image,
   emotion,
   intensity,
@@ -79,6 +80,7 @@ export function MemoryCard({
   privacy,
   onClick,
 }: {
+  id?: number;
   image?: string;
   emotion: EmotionType;
   intensity?: number;
@@ -88,10 +90,30 @@ export function MemoryCard({
   privacy: 'Private' | 'Friends' | 'Public';
   onClick?: () => void;
 }) {
+
+  const navigate = useNavigate();
+  
+  // Create memory object for navigation
+  const memoryData = {
+    id,
+    image,
+    emotion,
+    intensity,
+    timestamp,
+    location,
+    heartRate,
+    privacy
+  };
   return (
     <div 
       className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
-      onClick={onClick}
+      onClick={() => {
+        if (onClick) {
+          onClick();
+        } else if (id) {
+          navigate(`/memory/${id}`, { state: { memory: memoryData } });
+        }
+      }}
     >
       <div className="aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 relative">
         {image ? (

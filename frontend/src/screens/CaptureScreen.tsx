@@ -12,7 +12,7 @@ import {
 import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
-  const [emotion] = useState<EmotionType>('Excited');
+  const [emotion, setEmotion] = useState<EmotionType>('Excited'); // ← Can now change!
   const [privacy, setPrivacy] = useState<'Private' | 'Friends' | 'Public'>('Private');
   const [saving, setSaving] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
@@ -36,8 +36,8 @@ export default function CaptureScreen() {
     lat: 51.0447,
     lng: -114.0719
   });
+  const emotionOptions: EmotionType[] = ['Calm', 'Excited', 'Stressed', 'Aroused'];
 
-  // Start camera when component mounts
   useEffect(() => {
     startCamera();
     return () => {
@@ -74,6 +74,10 @@ export default function CaptureScreen() {
       setStream(null);
       setCameraActive(false);
     }
+  }
+
+  function flipCamera() {
+    setFacingMode(current => current === 'user' ? 'environment' : 'user');
   }
 
   function takePicture() {
@@ -270,6 +274,7 @@ export default function CaptureScreen() {
 
             {!capturedImage && (
               <button 
+                onClick={flipCamera}
                 className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
               >
                 <RotateCw className="w-5 h-5" />
@@ -277,6 +282,33 @@ export default function CaptureScreen() {
             )}
           </div>
         </div>
+
+      {/* EMOTION SELECTOR - NEW! */}
+      {!capturedImage && (
+        <div className="absolute top-24 left-0 right-0 z-10 px-6">
+          <div className="max-w-md mx-auto">
+            <div className="flex justify-center gap-2">
+              {emotionOptions.map(e => (
+                <button
+                  key={e}
+                  onClick={() => setEmotion(e)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    emotion === e 
+                      ? 'bg-white text-gray-800 shadow-lg scale-110' 
+                      : 'bg-white/20 backdrop-blur-sm text-white/80 hover:bg-white/30'
+                  }`}
+                  style={{ 
+                    borderWidth: emotion === e ? '2px' : '0',
+                    borderColor: emotion === e ? emotionColors[e] : 'transparent'
+                  }}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Center Capture/Save Button */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
@@ -357,7 +389,7 @@ export default function CaptureScreen() {
             </div>
           ) : (
             <p className="text-center text-sm text-white/80">
-              {cameraActive ? 'Tap to capture this moment' : 'Starting camera...'}
+              {cameraActive ? 'Select emotion and tap to capture' : 'Starting camera...'}
             </p>
           )}
           {showNotification && currentBiometrics && (
