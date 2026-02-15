@@ -9,7 +9,7 @@ import {
   createBiometricStream,
   BiometricData, 
 } from '../services/MLEmotionDetection';
-// import BiometricNotification from '../components/BiometricNotification';
+import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
   const [emotion, setEmotion] = useState<EmotionType>('Excited'); // ← Can now change!
