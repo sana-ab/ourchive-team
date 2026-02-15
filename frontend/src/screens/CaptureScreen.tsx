@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, ChevronLeft, RotateCw, Camera } from 'lucide-react';
 import { emotionColors, EmotionType } from '../components/app/OurchiveComponents';
 import { createMemory } from '../services/api';
+import { 
+  predictEmotion, 
+  isEmotionalMoment,
+  createBiometricStream,
+  BiometricData, 
+} from '../services/MLEmotionDetection';
+import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
   const [emotion, setEmotion] = useState<EmotionType>('Excited'); // ← Can now change!
@@ -15,9 +22,20 @@ export default function CaptureScreen() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
   const navigate = useNavigate();
-
   const privacyOptions: ('Private' | 'Friends' | 'Public')[] = ['Private', 'Friends', 'Public'];
+  
+  const [currentBiometrics, setCurrentBiometrics] = useState<BiometricData | null>(null);
+  const [mlEmotion, setMlEmotion] = useState<EmotionType>('Calm');
+  const [mlIntensity, setMlIntensity] = useState(50);
+  const [showNotification, setShowNotification] = useState(false);
+  
+  const [location, setLocation] = useState({
+    name: 'University of Calgary',
+    lat: 51.0447,
+    lng: -114.0719
+  });
   const emotionOptions: EmotionType[] = ['Calm', 'Excited', 'Stressed', 'Aroused'];
 
   useEffect(() => {
@@ -85,13 +103,8 @@ export default function CaptureScreen() {
     startCamera();
   }
 
-  const [location, setLocation] = useState({
-    name: 'University of Calgary',
-    lat: 51.0447,
-    lng: -114.0719
-  });
-
   useEffect(() => {
+    // --- Effect 1: Geolocation ---
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -100,24 +113,57 @@ export default function CaptureScreen() {
           
           try {
             const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+              {
+                headers: {
+                  'User-Agent': 'OurchiveApp/1.0 (contact@example.com)' 
+                }
+              }
             );
+            
+            if (!response.ok) throw new Error('Geocoding failed');
+            
             const data = await response.json();
             setLocation({
-              name: data.display_name.split(',')[0] || 'Current Location',
+              name: data.display_name?.split(',')[0] || 'Current Location',
               lat,
               lng
             });
-          } catch {
+          } catch (error) {
+            console.warn('Location lookup failed:', error);
             setLocation({ name: 'Current Location', lat, lng });
           }
         },
-        () => {
-          console.log('Location permission denied, using default');
+        (error) => {
+          console.log('Location permission denied/error:', error.message);
         }
       );
     }
-  }, []);
+  }, []); 
+
+  useEffect(() => {
+    // --- Effect 2: Biometrics ---
+    console.log('🫀 Starting biometric monitoring...');
+    
+    const cleanup = createBiometricStream(async (biometrics) => {
+      setCurrentBiometrics(biometrics);
+      
+      try {
+        const prediction = await predictEmotion(biometrics);
+        setMlEmotion(prediction.emotion);
+        setMlIntensity(prediction.intensity);
+        
+        if (isEmotionalMoment(biometrics) && !showNotification && !capturedImage) {
+          console.log('🎯 Emotional moment detected!');
+          setShowNotification(true);
+        }
+      } catch (error) {
+        console.error('ML prediction error:', error);
+      }
+    }, 3000); 
+    
+    return cleanup;
+  }, [showNotification, capturedImage]); 
 
   async function handleSave() {
     setSaving(true);
@@ -132,15 +178,15 @@ export default function CaptureScreen() {
       }
       
       await createMemory({
-        emotion,
-        intensity: 87,
+        emotion: mlEmotion, //  ML-detected emotion
+      intensity: mlIntensity, // Use ML intensity
         timestamp: new Date().toLocaleString(),
         location: location.name,
         latitude: location.lat,
         longitude: location.lng,
         heartRate: 105,
         privacy,
-        image: imageFile,
+        image: imageFile, 
       });
       
       navigate('/feed');
@@ -199,19 +245,21 @@ export default function CaptureScreen() {
               <ChevronLeft className="w-6 h-6" />
             </button>
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: emotionColors[emotion] }}
-                />
-                <span className="text-sm font-medium">{emotion}</span>
-              </div>
+            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
+             <div 
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: emotionColors[mlEmotion] }}
+            />
+               <span className="text-sm font-medium">{mlEmotion}</span>
+               <span className="text-xs opacity-75">ML</span>
+            </div>
 
-              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
+             <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
                 <Heart className="w-4 h-4 fill-current text-red-400" />
-                <span className="text-sm font-medium">105 BPM</span>
-              </div>
+                <span className="text-sm font-medium">
+                  {currentBiometrics?.heartRate || 70} BPM
+               </span>
+            </div>
 
               <div className="bg-white/20 backdrop-blur-sm px-3 py-2 rounded-full">
                 <span className="text-sm font-medium">
@@ -234,7 +282,6 @@ export default function CaptureScreen() {
             )}
           </div>
         </div>
-      </div>
 
       {/* EMOTION SELECTOR - NEW! */}
       {!capturedImage && (
@@ -345,6 +392,21 @@ export default function CaptureScreen() {
               {cameraActive ? 'Select emotion and tap to capture' : 'Starting camera...'}
             </p>
           )}
+          {showNotification && currentBiometrics && (
+          <BiometricNotification
+            emotion={mlEmotion}
+            heartRate={currentBiometrics.heartRate}
+            intensity={mlIntensity}
+            onCapture={() => {
+              setShowNotification(false);
+              // Automatically trigger camera if not already active
+              if (!cameraActive) {
+                startCamera();
+              }
+            }}
+          onDismiss={() => setShowNotification(false)}
+        />
+      )}
         </div>
       </div>
     </div>
