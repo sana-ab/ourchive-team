@@ -137,8 +137,9 @@ export async function predictEmotion(biometrics: BiometricData): Promise<Emotion
   prediction.dispose();
 
   // Map to emotions
-  const emotions: EmotionType[] = ['Calm', 'Excited', 'Stressed', 'Aroused'];
-  const maxIndex = probabilities.indexOf(Math.max(...probabilities));
+  const emotions: EmotionType[] = ['Calm', 'Excited', 'Stressed', 'Aroused']
+  const probabilitiesArray = Array.from(probabilities);
+  const maxIndex = probabilitiesArray.indexOf(Math.max(...probabilitiesArray));
   const emotion = emotions[maxIndex];
   const confidence = probabilities[maxIndex];
 
