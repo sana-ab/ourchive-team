@@ -9,7 +9,7 @@ import {
   createBiometricStream,
   BiometricData, 
 } from '../services/MLEmotionDetection';
-// import BiometricNotification from '../components/BiometricNotification';
+import BiometricNotification from '../components/BiometricNotification';
 
 export default function CaptureScreen() {
   const [emotion] = useState<EmotionType>('Excited');
@@ -174,8 +174,8 @@ export default function CaptureScreen() {
       }
       
       await createMemory({
-        emotion,
-        intensity: 87,
+        emotion: mlEmotion, //  ML-detected emotion
+      intensity: mlIntensity, // Use ML intensity
         timestamp: new Date().toLocaleString(),
         location: location.name,
         latitude: location.lat,
@@ -360,6 +360,21 @@ export default function CaptureScreen() {
               {cameraActive ? 'Tap to capture this moment' : 'Starting camera...'}
             </p>
           )}
+          {showNotification && currentBiometrics && (
+          <BiometricNotification
+            emotion={mlEmotion}
+            heartRate={currentBiometrics.heartRate}
+            intensity={mlIntensity}
+            onCapture={() => {
+              setShowNotification(false);
+              // Automatically trigger camera if not already active
+              if (!cameraActive) {
+                startCamera();
+              }
+            }}
+          onDismiss={() => setShowNotification(false)}
+        />
+      )}
         </div>
       </div>
     </div>
